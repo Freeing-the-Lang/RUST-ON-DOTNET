@@ -1,17 +1,14 @@
-// File: main.cs
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 
 namespace RustOnDotnet
 {
-    class Program
+    class MainApp
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("[Rust-on-Dotnet]");
-            Console.WriteLine("Prototype runtime starting...\n");
+            Console.WriteLine("=== Rust-on-DOTNET v0.1 ===");
 
             if (args.Length == 0)
             {
@@ -19,48 +16,37 @@ namespace RustOnDotnet
                 return;
             }
 
-            string file = args[0];
+            string path = args[0];
+            string src = File.ReadAllText(path);
 
-            if (!File.Exists(file))
-            {
-                Console.WriteLine("Source not found: " + file);
-                return;
-            }
-
-            string src = File.ReadAllText(file);
-
-            Console.WriteLine("Source:");
-            Console.WriteLine("-------------------------------");
+            Console.WriteLine("\nSource Code:");
+            Console.WriteLine("---------------------------------");
             Console.WriteLine(src);
-            Console.WriteLine("-------------------------------\n");
+            Console.WriteLine("---------------------------------\n");
 
-            // LEX
             Lexer lx = new Lexer(src);
-            var tokens = new List<Token>();
+            var toks = new List<Token>();
             Token tk;
+
             while ((tk = lx.Next()).Kind != TokenKind.EOF)
-                tokens.Add(tk);
+                toks.Add(tk);
 
             Console.WriteLine("Tokens:");
-            foreach (var t in tokens)
+            foreach (var t in toks)
                 Console.WriteLine(" " + t);
 
-            // PARSE
-            Parser p = new Parser(tokens);
+            Parser p = new Parser(toks);
             Node ast = p.Parse();
 
-            Console.WriteLine("\nAST parsed.");
+            Console.WriteLine("\nAST Ready.");
 
-            // INTERPRET
             Interpreter vm = new Interpreter();
             int result = vm.Eval(ast);
 
             Console.WriteLine("\nInterpreter Result = " + result);
 
-            // IL EMIT (Prototype)
-            Console.WriteLine("\n>> Running IL prototype...");
-            var ilgen = new ILGeneratorPrototype();
-            ilgen.EmitHello();
+            Console.WriteLine("\nRunning IL backend test...");
+            new ILEmit().EmitHello();
 
             Console.WriteLine("\n[Done]");
         }
