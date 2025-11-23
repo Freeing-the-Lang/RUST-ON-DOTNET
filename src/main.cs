@@ -1,7 +1,8 @@
 // File: main.cs
-// Prototype: Rust-on-Dotnet runtime loader
 
 using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace RustOnDotnet
 {
@@ -10,7 +11,7 @@ namespace RustOnDotnet
         static void Main(string[] args)
         {
             Console.WriteLine("[Rust-on-Dotnet]");
-            Console.WriteLine("Prototype runtime booting...");
+            Console.WriteLine("Prototype runtime starting...\n");
 
             if (args.Length == 0)
             {
@@ -20,29 +21,49 @@ namespace RustOnDotnet
 
             string file = args[0];
 
-            if (!System.IO.File.Exists(file))
+            if (!File.Exists(file))
             {
                 Console.WriteLine("Source not found: " + file);
                 return;
             }
 
-            string src = System.IO.File.ReadAllText(file);
-            Console.WriteLine("Loaded Rust file:");
-            Console.WriteLine("--------------------------------");
+            string src = File.ReadAllText(file);
+
+            Console.WriteLine("Source:");
+            Console.WriteLine("-------------------------------");
             Console.WriteLine(src);
-            Console.WriteLine("--------------------------------");
+            Console.WriteLine("-------------------------------\n");
 
-            // 실제 Rust -> IL 변환 준비 포인트
-            Console.WriteLine("Tokenizing Rust code (prototype)...");
-            SimpleLexer lx = new SimpleLexer(src);
-
+            // LEX
+            Lexer lx = new Lexer(src);
+            var tokens = new List<Token>();
             Token tk;
             while ((tk = lx.Next()).Kind != TokenKind.EOF)
-            {
-                Console.WriteLine(tk);
-            }
+                tokens.Add(tk);
 
-            Console.WriteLine("\nRuntime ready.");
+            Console.WriteLine("Tokens:");
+            foreach (var t in tokens)
+                Console.WriteLine(" " + t);
+
+            // PARSE
+            Parser p = new Parser(tokens);
+            Node ast = p.Parse();
+
+            Console.WriteLine("\nAST parsed.");
+
+            // INTERPRET
+            Interpreter vm = new Interpreter();
+            int result = vm.Eval(ast);
+
+            Console.WriteLine("\nInterpreter Result = " + result);
+
+            // IL EMIT (Prototype)
+            Console.WriteLine("\n>> Running IL prototype...");
+            var ilgen = new ILGeneratorPrototype();
+            ilgen.EmitHello();
+
+            Console.WriteLine("\n[Done]");
         }
     }
 }
+
