@@ -1,5 +1,3 @@
-// File: token.cs
-
 using System;
 
 namespace RustOnDotnet
@@ -25,6 +23,6 @@ namespace RustOnDotnet
         }
 
         public override string ToString()
-            => $"{Kind} : {Text}";
+            => $"{Kind}:{Text}";
     }
 }
