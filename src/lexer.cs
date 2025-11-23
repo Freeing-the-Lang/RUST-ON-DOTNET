@@ -1,13 +1,11 @@
+// File: lexer.cs
+
 using System;
 using System.Collections.Generic;
 
 namespace RustOnDotnet
 {
-    public enum TokenKind { Ident, Number, Symbol, Keyword, EOF }
-
-    public record Token(TokenKind Kind, string Text);
-
-    public class SimpleLexer
+    public class Lexer
     {
         private readonly string _src;
         private int _i = 0;
@@ -17,7 +15,7 @@ namespace RustOnDotnet
             "fn", "let", "mut", "return"
         };
 
-        public SimpleLexer(string src) => _src = src;
+        public Lexer(string src) => _src = src;
 
         public Token Next()
         {
@@ -46,7 +44,6 @@ namespace RustOnDotnet
             string word = _src[s.._i];
             if (Keywords.Contains(word))
                 return new Token(TokenKind.Keyword, word);
-
             return new Token(TokenKind.Ident, word);
         }
 
