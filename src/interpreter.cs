@@ -1,3 +1,5 @@
+// File: interpreter.cs
+
 using System;
 using System.Collections.Generic;
 
@@ -27,16 +29,22 @@ namespace RustOnDotnet
         {
             return n switch
             {
-                NumberLit num      => num.Value,
-                IdentExpr id       => Get(id.Name),
+                NumberLit num => num.Value,
+                IdentExpr id => Get(id.Name),
 
-                LetDecl let        => (Set(let.Name, Eval(let.Value)), 0).Item2,
+                // FIXED — tuple 제거
+                LetDecl let =>
+                {
+                    int v = Eval(let.Value);
+                    Set(let.Name, v);
+                    return v;
+                },
 
-                Binary b           => EvalBin(b),
+                Binary b => EvalBin(b),
 
-                ReturnStmt r       => Eval(r.Expr),
+                ReturnStmt r => Eval(r.Expr),
 
-                Block blk          => EvalBlock(blk),
+                Block blk => EvalBlock(blk),
 
                 _ => throw new Exception("Unsupported node: " + n)
             };
@@ -45,8 +53,8 @@ namespace RustOnDotnet
         private int EvalBlock(Block b)
         {
             Scopes.Push(new Dictionary<string,int>());
-
             int last = 0;
+
             foreach (var s in b.Stmts)
                 last = Eval(s);
 
@@ -65,9 +73,10 @@ namespace RustOnDotnet
                 "-" => l - r,
                 "*" => l * r,
                 "/" => r == 0 ? throw new Exception("div0") : l / r,
-                _ => throw new Exception("Unknown op: " + b.Op)
+                _ => throw new Exception("Unknown operator: " + b.Op)
             };
         }
     }
 }
+
 
