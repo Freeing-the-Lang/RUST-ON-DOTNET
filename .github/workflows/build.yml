@@ -1,4 +1,4 @@
-name: Rust-on-DOTNET Auto Release (No-Conflict)
+name: Rust-on-DOTNET Auto Release (No-Conflict + Build-Fix)
 
 on:
   push:
@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-
   # ===========================================================
   # TAG 생성 + 중복 체크
   # ===========================================================
@@ -27,15 +26,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate new tag
+      - name: Generate version tag
         id: tag
         run: |
           DATE=$(date +"%Y%m%d%H%M")
           TAG="v1.0.${DATE}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Generated tag: $TAG"
 
-      - name: Check if tag already exists
+      - name: Check release duplication
         id: check
         run: |
           TAG=${{ steps.tag.outputs.tag }}
@@ -43,21 +41,20 @@ jobs:
 
           if [ "$EXISTS" = "$TAG" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag already exists: $TAG"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag is new: $TAG"
           fi
         env:
           GH_TOKEN: ${{ github.token }}
 
   # ===========================================================
-  # 3OS BUILD (릴리즈가 이미 있으면 SKIP)
+  # 3 OS 빌드 (태그 이미 있으면 SKIP)
   # ===========================================================
   build-3os:
     needs: versioning
     if: needs.versioning.outputs.tag_exists == 'false'
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -72,17 +69,19 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Build
-        run: dotnet build --configuration Release
+      - name: Build (Release)
+        run: |
+          cd src
+          dotnet build RustOnDotnet.csproj --configuration Release
 
       - name: Prepare Proof
         run: |
           mkdir -p proof
-          echo "Rust-on-DOTNET Proof Ledger"  > proof/info-${{ matrix.os }}.txt
-          echo "Tag: ${{ needs.versioning.outputs.new_tag }}" >> proof/info-${{ matrix.os }}.txt
-          echo "Commit: $GITHUB_SHA" >> proof/info-${{ matrix.os }}.txt
-          echo "OS: ${{ matrix.os }}" >> proof/info-${{ matrix.os }}.txt
-          echo "Build-Time: $(date)" >> proof/info-${{ matrix.os }}.txt
+          echo "Rust-on-Dotnet Proof" > proof/proof-${{ matrix.os }}.txt
+          echo "Tag: ${{ needs.versioning.outputs.new_tag }}" >> proof/proof-${{ matrix.os }}.txt
+          echo "OS: ${{ matrix.os }}" >> proof/proof-${{ matrix.os }}.txt
+          echo "Commit: $GITHUB_SHA" >> proof/proof-${{ matrix.os }}.txt
+          echo "Build-Time: $(date)" >> proof/proof-${{ matrix.os }}.txt
 
       - name: SHA256
         run: |
@@ -92,17 +91,18 @@ jobs:
       - name: Collect Artifacts
         run: |
           mkdir -p out
-          cp -r **/bin/Release/ out/ || true
+          cp -r src/bin out/ || true
           cp -r proof out/ || true
+          cp README.md out/ || true
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}
+          name: rust-on-dotnet-${{ matrix.os }}
           path: out/
 
   # ===========================================================
-  # 릴리즈 생성 (중복 존재 시 SKIP)
+  # 릴리즈 생성
   # ===========================================================
   release:
     needs: [versioning, build-3os]
@@ -113,12 +113,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release/
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.versioning.outputs.new_tag }}
@@ -126,19 +126,20 @@ jobs:
           body: |
             ## Rust-on-DOTNET Auto Release
             - Tag: ${{ needs.versioning.outputs.new_tag }}
-            - Auto-build for 3 OS
-            - Includes SHA256 + Proof Ledger
+            - Commit: ${{ github.sha }}
+            - Auto build for 3 OS
+            - Includes ProofLedger + SHA256 + bin/Release
 
           files: |
             release/**
 
       - name: Summary
         run: |
-          echo "### Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Completed" >> $GITHUB_STEP_SUMMARY
           echo "- Tag: ${{ needs.versioning.outputs.new_tag }}" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================
-  # 릴리즈가 이미 존재할 때 실행되는 SKIP JOB
+  # 릴리즈 건너뛰기 (중복)
   # ===========================================================
   release-skip:
     needs: versioning
@@ -146,7 +147,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Skip Summary
+      - name: Summary
         run: |
-          echo "### ⚠ Release skipped" >> $GITHUB_STEP_SUMMARY
-          echo "Cause: Tag already exists" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚠ Release Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "Reason: Tag already exists" >> $GITHUB_STEP_SUMMARY
+
