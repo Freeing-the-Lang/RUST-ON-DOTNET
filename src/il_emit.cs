@@ -20,13 +20,19 @@ namespace RustOnDotnet
                 MethodAttributes.Public | MethodAttributes.Static);
 
             var il = method.GetILGenerator();
+
+            var writeLine = typeof(Console).GetMethod(
+                "WriteLine",
+                new[] { typeof(string) }
+            )!; // FIX — null-forgiving operator
+
             il.Emit(OpCodes.Ldstr, "Rust-on-Dotnet IL: OK");
-            il.Emit(OpCodes.Call, typeof(Console)
-                .GetMethod("WriteLine", new[] { typeof(string) }));
+            il.Emit(OpCodes.Call, writeLine);
             il.Emit(OpCodes.Ret);
 
-            var t = type.CreateType();
-            t.GetMethod("main")?.Invoke(null, null);
+            var finalType = type.CreateType();
+            finalType?.GetMethod("main")?.Invoke(null, null);
         }
     }
 }
+
