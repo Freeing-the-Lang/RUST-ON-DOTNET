@@ -1,5 +1,3 @@
-// File: ast.cs
-
 using System.Collections.Generic;
 
 namespace RustOnDotnet
@@ -15,20 +13,19 @@ namespace RustOnDotnet
     public class IdentExpr : Node
     {
         public string Name;
-        public IdentExpr(string name) => Name = name;
+        public IdentExpr(string n) => Name = n;
     }
 
     public class Binary : Node
     {
         public string Op;
-        public Node Left;
-        public Node Right;
-
+        public Node L;
+        public Node R;
         public Binary(string op, Node l, Node r)
         {
             Op = op;
-            Left = l;
-            Right = r;
+            L = l;
+            R = r;
         }
     }
 
@@ -36,25 +33,30 @@ namespace RustOnDotnet
     {
         public string Name;
         public Node Value;
+        public LetDecl(string n, Node v) { Name = n; Value = v; }
+    }
 
-        public LetDecl(string name, Node val)
-        {
-            Name = name;
-            Value = val;
-        }
+    public class ReturnStmt : Node
+    {
+        public Node Expr;
+        public ReturnStmt(Node e) => Expr = e;
+    }
+
+    public class Block : Node
+    {
+        public List<Node> Stmts;
+        public Block(List<Node> s) => Stmts = s;
     }
 
     public class FnDecl : Node
     {
         public string Name;
         public List<string> Args;
-        public Node Body;
+        public Block Body;
 
-        public FnDecl(string n, List<string> a, Node b)
+        public FnDecl(string n, List<string> a, Block b)
         {
-            Name = n;
-            Args = a;
-            Body = b;
+            Name = n; Args = a; Body = b;
         }
     }
 }
