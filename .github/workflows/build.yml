@@ -1,0 +1,152 @@
+name: Rust-on-DOTNET Auto Release (No-Conflict)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-on-dotnet-release
+  cancel-in-progress: false
+
+jobs:
+
+  # ===========================================================
+  # TAG 생성 + 중복 체크
+  # ===========================================================
+  versioning:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.tag }}
+      tag_exists: ${{ steps.check.outputs.exists }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate new tag
+        id: tag
+        run: |
+          DATE=$(date +"%Y%m%d%H%M")
+          TAG="v1.0.${DATE}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+      - name: Check if tag already exists
+        id: check
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          EXISTS=$(gh release view "$TAG" --json tagName --jq ".tagName" 2>/dev/null || true)
+
+          if [ "$EXISTS" = "$TAG" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag already exists: $TAG"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag is new: $TAG"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # ===========================================================
+  # 3OS BUILD (릴리즈가 이미 있으면 SKIP)
+  # ===========================================================
+  build-3os:
+    needs: versioning
+    if: needs.versioning.outputs.tag_exists == 'false'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Prepare Proof
+        run: |
+          mkdir -p proof
+          echo "Rust-on-DOTNET Proof Ledger"  > proof/info-${{ matrix.os }}.txt
+          echo "Tag: ${{ needs.versioning.outputs.new_tag }}" >> proof/info-${{ matrix.os }}.txt
+          echo "Commit: $GITHUB_SHA" >> proof/info-${{ matrix.os }}.txt
+          echo "OS: ${{ matrix.os }}" >> proof/info-${{ matrix.os }}.txt
+          echo "Build-Time: $(date)" >> proof/info-${{ matrix.os }}.txt
+
+      - name: SHA256
+        run: |
+          echo "SHA256 Checksums" > proof/sha256-${{ matrix.os }}.txt
+          find . -type f -exec sha256sum {} \; >> proof/sha256-${{ matrix.os }}.txt
+
+      - name: Collect Artifacts
+        run: |
+          mkdir -p out
+          cp -r **/bin/Release/ out/ || true
+          cp -r proof out/ || true
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: out/
+
+  # ===========================================================
+  # 릴리즈 생성 (중복 존재 시 SKIP)
+  # ===========================================================
+  release:
+    needs: [versioning, build-3os]
+    if: needs.versioning.outputs.tag_exists == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.versioning.outputs.new_tag }}
+          name: "Rust-on-DOTNET ${{ needs.versioning.outputs.new_tag }}"
+          body: |
+            ## Rust-on-DOTNET Auto Release
+            - Tag: ${{ needs.versioning.outputs.new_tag }}
+            - Auto-build for 3 OS
+            - Includes SHA256 + Proof Ledger
+
+          files: |
+            release/**
+
+      - name: Summary
+        run: |
+          echo "### Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag: ${{ needs.versioning.outputs.new_tag }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================
+  # 릴리즈가 이미 존재할 때 실행되는 SKIP JOB
+  # ===========================================================
+  release-skip:
+    needs: versioning
+    if: needs.versioning.outputs.tag_exists == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Skip Summary
+        run: |
+          echo "### ⚠ Release skipped" >> $GITHUB_STEP_SUMMARY
+          echo "Cause: Tag already exists" >> $GITHUB_STEP_SUMMARY
