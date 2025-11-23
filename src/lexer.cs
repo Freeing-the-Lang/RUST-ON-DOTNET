@@ -1,5 +1,3 @@
-// File: lexer.cs
-
 using System;
 using System.Collections.Generic;
 
@@ -32,7 +30,26 @@ namespace RustOnDotnet
             if (char.IsDigit(c))
                 return Number();
 
+            // multi-character operators
+            if (c == '=' && Peek(1) == '=')
+            {
+                _i += 2;
+                return new Token(TokenKind.Symbol, "==");
+            }
+
+            if ("+-*/=(){}".Contains(c))
+            {
+                _i++;
+                return new Token(TokenKind.Symbol, c.ToString());
+            }
+
             return new Token(TokenKind.Symbol, _src[_i++].ToString());
+        }
+
+        private char Peek(int k)
+        {
+            int pos = _i + k;
+            return pos < _src.Length ? _src[pos] : '\0';
         }
 
         private Token Ident()
@@ -44,6 +61,7 @@ namespace RustOnDotnet
             string word = _src[s.._i];
             if (Keywords.Contains(word))
                 return new Token(TokenKind.Keyword, word);
+
             return new Token(TokenKind.Ident, word);
         }
 
@@ -52,7 +70,6 @@ namespace RustOnDotnet
             int s = _i;
             while (_i < _src.Length && char.IsDigit(_src[_i]))
                 _i++;
-
             return new Token(TokenKind.Number, _src[s.._i]);
         }
 
@@ -63,3 +80,4 @@ namespace RustOnDotnet
         }
     }
 }
+
