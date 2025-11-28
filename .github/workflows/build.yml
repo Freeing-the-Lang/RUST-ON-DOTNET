@@ -1,4 +1,4 @@
-name: Rust-on-DOTNET Auto Release (No-Conflict + Build-Fix)
+name: Rust-on-DOTNET Auto Release (No-Conflict + Build-Fix v2)
 
 on:
   push:
@@ -38,7 +38,6 @@ jobs:
         run: |
           TAG=${{ steps.tag.outputs.tag }}
           EXISTS=$(gh release view "$TAG" --json tagName --jq ".tagName" 2>/dev/null || true)
-
           if [ "$EXISTS" = "$TAG" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
@@ -48,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   # ===========================================================
-  # 3 OS 빌드 (태그 이미 있으면 SKIP)
+  # 3 OS 빌드
   # ===========================================================
   build-3os:
     needs: versioning
@@ -74,25 +73,43 @@ jobs:
           cd src
           dotnet build RustOnDotnet.csproj --configuration Release
 
-      - name: Prepare Proof
+      # ===== SHA256 OS 분리 =====
+      - name: SHA256 (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p proof
-          echo "Rust-on-Dotnet Proof" > proof/proof-${{ matrix.os }}.txt
+          sha256sum -b src/bin/Release/net8.0/* > proof/sha256-${{ matrix.os }}.txt
+
+      - name: SHA256 (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p proof
+          shasum -a 256 src/bin/Release/net8.0/* > proof/sha256-${{ matrix.os }}.txt
+
+      - name: SHA256 (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          mkdir proof
+          Get-ChildItem -Path src\bin\Release\net8.0\* | ForEach-Object {
+            $hash = certutil -hashfile $_.FullName SHA256 | Select-String -NotMatch "certutil"
+            echo "$($_.Name) $hash" >> proof\sha256-${{ matrix.os }}.txt
+          }
+
+      # ===== ProofLedger =====
+      - name: Prepare ProofLedger
+        run: |
+          echo "Rust-on-DOTNET Proof" > proof/proof-${{ matrix.os }}.txt
           echo "Tag: ${{ needs.versioning.outputs.new_tag }}" >> proof/proof-${{ matrix.os }}.txt
           echo "OS: ${{ matrix.os }}" >> proof/proof-${{ matrix.os }}.txt
           echo "Commit: $GITHUB_SHA" >> proof/proof-${{ matrix.os }}.txt
           echo "Build-Time: $(date)" >> proof/proof-${{ matrix.os }}.txt
 
-      - name: SHA256
-        run: |
-          echo "SHA256 Checksums" > proof/sha256-${{ matrix.os }}.txt
-          find . -type f -exec sha256sum {} \; >> proof/sha256-${{ matrix.os }}.txt
-
       - name: Collect Artifacts
         run: |
           mkdir -p out
-          cp -r src/bin out/ || true
-          cp -r proof out/ || true
+          cp -r src/bin/Release/net8.0 out/bin || true
+          cp -r proof out/proof || true
           cp README.md out/ || true
 
       - name: Upload Artifact
@@ -110,13 +127,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release/
+          path: collected/
+
+      - name: Zip all
+        run: |
+          cd collected
+          zip -r rust-on-dotnet-${{ needs.versioning.outputs.new_tag }}.zip .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -131,7 +150,9 @@ jobs:
             - Includes ProofLedger + SHA256 + bin/Release
 
           files: |
-            release/**
+            collected/rust-on-dotnet-${{ needs.versioning.outputs.new_tag }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         run: |
@@ -139,7 +160,7 @@ jobs:
           echo "- Tag: ${{ needs.versioning.outputs.new_tag }}" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================
-  # 릴리즈 건너뛰기 (중복)
+  # 릴리즈 SKIP (태그 중복)
   # ===========================================================
   release-skip:
     needs: versioning
@@ -151,4 +172,3 @@ jobs:
         run: |
           echo "### ⚠ Release Skipped" >> $GITHUB_STEP_SUMMARY
           echo "Reason: Tag already exists" >> $GITHUB_STEP_SUMMARY
-
