@@ -13,15 +13,20 @@ namespace RustOnDotnet
         private Token Peek() => _t[_i];
         private Token Next() => _t[_i++];
 
+        private bool Is(string s) => Peek().Text == s;
+        private bool Is(TokenKind k) => Peek().Kind == k;
+
+        private bool End => _i >= _t.Count;
+
         public Node Parse()
         {
             if (Is("fn")) return ParseFn();
             return ParseStmt();
         }
 
-        private bool Is(string s)
-            => Peek().Text == s;
-
+        // ---------------------------
+        // fn <name>() { block }
+        // ---------------------------
         private Node ParseFn()
         {
             Next(); // fn
@@ -35,18 +40,24 @@ namespace RustOnDotnet
             return new FnDecl(name, new List<string>(), body);
         }
 
+        // ---------------------------
+        // { ... }
+        // ---------------------------
         private Block ParseBlock()
         {
             Expect("{");
             var list = new List<Node>();
 
-            while (!Is("}"))
+            while (!Is("}") && !End)
                 list.Add(ParseStmt());
 
             Expect("}");
             return new Block(list);
         }
 
+        // ---------------------------
+        // let / return / expr
+        // ---------------------------
         private Node ParseStmt()
         {
             if (Is("let")) return ParseLet();
@@ -65,33 +76,69 @@ namespace RustOnDotnet
 
         private Node ParseReturn()
         {
-            Next();
-            return new ReturnStmt(ParseExpr());
+            Next(); // return
+            Node value = ParseExpr();
+            return new ReturnStmt(value);
         }
+
+        // ============================================================
+        // Expression Parser (with precedence!)
+        // ============================================================
+        //
+        // Expr  → Term ( ("+"|"-") Term )*
+        // Term  → Factor ( ("*"|"/") Factor )*
+        // Factor → Number | Ident | "(" Expr ")"
+        //
+        // ============================================================
 
         private Node ParseExpr()
         {
-            Node left = ParsePrimary();
+            Node node = ParseTerm();
 
-            while (Is("+") || Is("-") || Is("*") || Is("/"))
+            while (Is("+") || Is("-"))
             {
                 string op = Next().Text;
-                Node right = ParsePrimary();
-                left = new Binary(op, left, right);
+                Node r = ParseTerm();
+                node = new Binary(op, node, r);
             }
 
-            return left;
+            return node;
         }
 
-        private Node ParsePrimary()
+        private Node ParseTerm()
         {
-            Token t = Next();
+            Node node = ParseFactor();
+
+            while (Is("*") || Is("/"))
+            {
+                string op = Next().Text;
+                Node r = ParseFactor();
+                node = new Binary(op, node, r);
+            }
+
+            return node;
+        }
+
+        private Node ParseFactor()
+        {
+            Token t = Peek();
+
+            // (expr)
+            if (Is("("))
+            {
+                Next();
+                Node e = ParseExpr();
+                Expect(")");
+                return e;
+            }
+
+            Next(); // consume token
 
             return t.Kind switch
             {
                 TokenKind.Number => new NumberLit(int.Parse(t.Text)),
                 TokenKind.Ident => new IdentExpr(t.Text),
-                _ => throw new Exception("Unexpected token: " + t)
+                _ => throw new Exception("Unexpected token: " + t.Text)
             };
         }
 
@@ -102,4 +149,3 @@ namespace RustOnDotnet
         }
     }
 }
-
