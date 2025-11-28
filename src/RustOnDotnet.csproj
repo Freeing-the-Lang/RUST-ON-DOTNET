@@ -3,8 +3,27 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+
+    <!-- 편의 기능 -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- 성능 강화 -->
+    <Optimize>true</Optimize>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+
+    <!-- IL Emit 안전 허용 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Release 빌드 출력을 GitHub Actions에서 잘 찾도록 -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 필요한 경우 JSON 파서/유틸 추가 가능 -->
+    <!-- <PackageReference Include="System.Text.Json" Version="8.0.0" /> -->
+  </ItemGroup>
 
 </Project>
